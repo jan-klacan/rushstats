@@ -79,6 +79,9 @@ separate process-memory limit, though reaching it may terminate the container.
 python scripts/smoke_container.py --image rushstats:0.2.0
 ```
 
-This checks the non-root default, offline/read-only-root operation, report generation,
-overwrite refusal and missing-file errors using a temporary synthetic dataset. The
+This checks the non-root default separately, then checks offline/read-only-root
+operation, report generation, overwrite refusal and missing-file errors using a
+temporary synthetic dataset. On POSIX hosts the mounted-file checks use the host
+UID/GID: atomic report files have owner-only permissions (0600), so native Linux
+requires matching ownership for the host process to read them. The
 same script runs in CI. It does not upload the image or data anywhere.

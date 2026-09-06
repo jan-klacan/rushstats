@@ -1,7 +1,9 @@
 """Exercise a locally built Docker image without network access at runtime."""
 
 import argparse
+import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -29,8 +31,15 @@ def main() -> None:
     assert uid == "10001", f"expected non-root UID 10001, got {uid}"
     with tempfile.TemporaryDirectory(prefix="rushstats-container-") as directory:
         root = Path(directory)
-        # The default container UID must be able to write to this synthetic fixture.
-        root.chmod(0o777)
+        # Atomic report files are mode 0600. On native Linux, the container must
+        # write as the host user so that this process can read its report. Docker
+        # Desktop's bind-mount translation can otherwise hide this mismatch.
+        user_args = []
+        if hasattr(os, "getuid"):
+            user_args = ["--user", f"{os.getuid()}:{os.getgid()}"]
+        else:
+            # Windows has no POSIX UID/GID; Docker Desktop mediates the mount.
+            root.chmod(0o777)
         source = root / "input.csv"
         source.write_text("group,value\nA,1\nA,1\nB,3\n", encoding="utf-8")
         source.chmod(0o644)
@@ -41,6 +50,7 @@ def main() -> None:
             "--network",
             "none",
             "--read-only",
+            *user_args,
             "--mount",
             f"type=bind,source={root},target=/data",
             args.image,
@@ -56,6 +66,10 @@ def main() -> None:
         ]
         run(*command)
         output = root / "report.md"
+        if sys.platform.startswith("linux"):
+            assert output.stat().st_uid == os.getuid(), (
+                "report must belong to the host user"
+            )
         report = output.read_text(encoding="utf-8")
         for section in ("Grouped Summaries", "Robust Statistics", "Duplicate Rows"):
             assert f"## {section}" in report
