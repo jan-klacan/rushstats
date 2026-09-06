@@ -4,7 +4,26 @@ The project prepares wheels and an sdist. Publishing is deliberately manual and 
 only from a matching `vVERSION` tag; pushing a commit or tag does not publish a package.
 No PyPI API token belongs in this repository.
 
-## One-time maintainer setup
+## GitHub Releases (current distribution channel)
+
+No PyPI account is required for this route.
+
+1. Commit the version changes on a feature branch and open a pull request into
+   `main`. Wait for the `tests` workflow and merge the PR.
+2. Run **Actions → Distribution builds → Run workflow** on the merged commit's
+   branch. Wait for all five wheels and the sdist to pass.
+3. Download the workflow artifacts and extract their ZIP wrappers. Keep the
+   `.whl` files themselves intact.
+4. Create a GitHub Release with tag `v0.3.0` targeting the exact commit that was
+   built. If `main` has advanced, select the built commit rather than its new tip.
+   Attach the five `.whl` files and `rushstats-0.3.0.tar.gz` as release assets.
+5. Add the v0.3.0 changelog notes, publish the release, and update README download
+   links from v0.2.0 to v0.3.0. Remove the development-version notice at that point.
+
+The automatically generated GitHub source archives are separate from the built
+sdist. The **Publish Python package** workflow is unnecessary for GitHub-only releases.
+
+## Optional one-time setup for PyPI/TestPyPI
 
 1. Confirm the PyPI name `rushstats` is available or under your control. PyPI and
    TestPyPI are independent services and require separate accounts/configuration.
@@ -36,7 +55,7 @@ Add the changelog entry, update versioned examples in Docker/release docs and th
 container smoke script's default image tag, and run:
 
 ```sh
-python scripts/check_release.py --tag v0.2.0
+python scripts/check_release.py --tag v0.3.0
 cargo test --locked
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
@@ -55,7 +74,7 @@ only when making incompatible result-schema changes, and document migrations.
 python -m pip install 'maturin==1.15.0' 'twine>=6,<7'
 maturin build --release --locked --strip --out dist
 maturin sdist --out dist
-python -m twine check dist/rushstats-0.2.0*
+python -m twine check dist/rushstats-0.3.0*
 ```
 
 Use a clean output directory per release; do not mix versions. Also rebuild from the
@@ -63,7 +82,7 @@ source archive to catch missing package files:
 
 ```sh
 python -m pip wheel --no-deps --no-build-isolation \
-  dist/rushstats-0.2.0.tar.gz --wheel-dir target/sdist-check
+  dist/rushstats-0.3.0.tar.gz --wheel-dir target/sdist-check
 ```
 
 Install that wheel in a clean virtual environment, run the test suite and exercise
@@ -99,8 +118,8 @@ After reviewing the changes and successful checks, commit and push the release, 
 create and push its matching version tag. For example, with an already reviewed commit:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Run **Publish Python package** from that tag, first selecting `testpypi`. The workflow
@@ -108,14 +127,14 @@ checks version consistency, builds and tests all distributions, and then request
 OIDC credential only in the publishing job. If using GitHub CLI:
 
 ```sh
-gh workflow run publish.yml --ref v0.2.0 -f destination=testpypi
+gh workflow run publish.yml --ref v0.3.0 -f destination=testpypi
 ```
 
 Verify a TestPyPI installation in a fresh environment:
 
 ```sh
 python -m pip install --index-url https://test.pypi.org/simple/ \
-  --only-binary=:all: --no-deps rushstats==0.2.0
+  --only-binary=:all: --no-deps rushstats==0.3.0
 rushstats --version
 ```
 

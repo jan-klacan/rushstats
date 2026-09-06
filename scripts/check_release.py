@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", help="expected release tag, e.g. v0.2.0")
+    parser.add_argument("--tag", help="expected release tag, e.g. v0.3.0")
     parser.add_argument("--require-tag", action="store_true")
     args = parser.parse_args()
     versions = {}

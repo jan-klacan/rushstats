@@ -10,7 +10,7 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--image", default="rushstats:0.2.0")
+    parser.add_argument("--image", default="rushstats:0.3.0")
     args = parser.parse_args()
 
     def run(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:

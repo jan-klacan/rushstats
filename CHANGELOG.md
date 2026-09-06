@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Add coloured terminal guidance, progress, summaries and errors with automatic plain output for pipes and NO_COLOR support.
+- Process multiple CSV datasets sequentially, with an optional output directory and continue-on-error mode.
+- Save and load versioned JSON analysis configurations; explicit CLI settings override presets.
+- Preflight batch output collisions and protect every input and configuration from report writes.
+
 ## 0.2.0
 
 - Add unscaled median absolute deviation and configurable symmetric trimmed means.

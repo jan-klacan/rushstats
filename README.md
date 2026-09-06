@@ -18,6 +18,9 @@ through [GitHub Releases](https://github.com/jan-klacan/rushstats/releases).
 Download a prebuilt wheel from the
 [v0.2.0 release](https://github.com/jan-klacan/rushstats/releases/tag/v0.2.0).
 The package is not currently published on PyPI.
+This checkout contains **v0.3.0** development: batch processing, saved configurations
+and terminal colours. Build from source to use these additions until v0.3.0 release
+wheels are published; v0.2.0 wheels do not include them.
 [Sample report](examples/customers.md) ·
 [Grouped report](examples/customers_by_city.md) · [Changelog](CHANGELOG.md)
 
@@ -100,8 +103,8 @@ python -m pip install target/wheels/rushstats-*.whl
   locally. It runs as a non-root user and needs no network while analyzing data.
 
 ```sh
-docker build -t rushstats:0.2.0 .
-docker run --rm rushstats:0.2.0 --help
+docker build -t rushstats:0.3.0 .
+docker run --rm rushstats:0.3.0 --help
 ```
 
 The [release guide](docs/RELEASING.md) describes the Linux/macOS/Windows wheel matrix,
@@ -141,6 +144,62 @@ no-clobber check. Input and output must be different files, even with `--force`.
 The destination directory must already exist. `--quiet` suppresses success output;
 errors still go to stderr. Exit codes: **0** success, **1** data/I/O/option-value
 failure, **2** argparse syntax failure. `--verbose` exposes tracebacks for debugging.
+
+## Batch processing and saved configurations (v0.3.0)
+
+Pass multiple input paths to apply the same options to each dataset, in order.
+Each dataset is loaded, analyzed and written before the next starts.
+
+```sh
+mkdir -p reports
+rushstats january.csv february.csv march.csv --all --output-dir reports
+```
+
+Without `--output-dir`, reports are written beside their inputs. Output directories
+must already exist. `-o` accepts one dataset only and cannot be combined with
+`--output-dir`. Duplicate output names, existing reports without `--force`, and
+outputs that overlap any input or loaded configuration are rejected before processing.
+Use distinct dataset filenames when writing to a shared directory.
+
+A dataset failure stops the batch by default; reports already completed are kept.
+Add `--continue-on-error` to attempt the remaining datasets. Any failure returns
+exit code 1, and the summary shows succeeded, failed and skipped counts. Invalid
+configuration or output layout stops the entire command before processing.
+
+Save analysis settings from a successful run, then reuse them on different data:
+
+```sh
+rushstats january.csv --describe --missing --percentiles 5,50,95 \
+  --save-config monthly.json
+rushstats february.csv march.csv --config monthly.json --output-dir reports
+
+# Replace the saved analysis selection and override a scalar option.
+rushstats april.csv --config monthly.json --robust --trim 0.2
+```
+
+Presets are versioned UTF-8 JSON files containing `version: 1` and an `options`
+object. Option keys use underscores (for example `group_by`), boolean flags use
+JSON booleans, and repeatable flags use arrays of strings. Unknown keys, unsupported
+versions and incorrect value types are rejected. You can inspect or edit a preset
+in a text editor; it contains settings, never CSV rows. Descriptions and column
+names are included when supplied.
+
+Explicit CLI values override the preset. A positive analysis flag such as
+`--describe` or `--all` replaces its saved analysis selection. Explicit `--type`
+and `--group-by` lists replace the corresponding saved lists. Use `--header` to
+reverse a saved `--no-header`. To clear saved lists, set them to `[]` in the JSON.
+Paths, `--force`, colour and execution controls are not saved. `--save-config`
+writes only after every dataset succeeds and always requires a new filename,
+including when `--force` is set. If saving fails, completed reports remain available.
+
+## Terminal guidance (v0.3.0)
+
+The CLI shows cyan progress, green completion messages, and red errors. Batch runs
+also show a final summary. `--help` lists available flags and examples.
+Colour is automatic in interactive terminals and disabled for redirected output,
+`TERM=dumb`, or when `NO_COLOR` is present. Override detection with
+`--color always` or `--color never`. Markdown reports never contain terminal colours.
+`--quiet` suppresses progress and success summaries; errors remain visible.
 
 ## Analyses and options
 

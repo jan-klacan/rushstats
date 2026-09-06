@@ -9,9 +9,9 @@ installation. No server, Compose stack, exposed port or persistent service is ne
 Start Docker Desktop (macOS/Windows) or the Docker daemon (Linux), then run:
 
 ```sh
-docker build -t rushstats:0.2.0 .
-docker run --rm rushstats:0.2.0 --version
-docker run --rm rushstats:0.2.0 --help
+docker build -t rushstats:0.3.0 .
+docker run --rm rushstats:0.3.0 --version
+docker run --rm rushstats:0.3.0 --help
 ```
 
 The multi-stage build compiles the extension with Rust, then installs only the wheel
@@ -33,7 +33,7 @@ On macOS/Linux, run from the directory containing your CSV:
 docker run --rm --network none \
   --user "$(id -u):$(id -g)" \
   --mount "type=bind,source=$(pwd),target=/data" \
-  rushstats:0.2.0 customers.csv --all --group-by city -o report.md
+  rushstats:0.3.0 customers.csv --all --group-by city -o report.md
 ```
 
 `/data` is the container's working directory. The report appears in the mounted host
@@ -46,7 +46,7 @@ PowerShell with Docker Desktop can use:
 ```powershell
 docker run --rm --network none `
   --mount "type=bind,source=$($PWD.Path),target=/data" `
-  rushstats:0.2.0 customers.csv --all -o report.md
+  rushstats:0.3.0 customers.csv --all -o report.md
 ```
 
 If the mounted output directory denies writes to the container's user, adjust the
@@ -66,7 +66,7 @@ docker run --rm --network none --read-only \
   --user "$(id -u):$(id -g)" \
   --mount "type=bind,source=$(pwd)/examples,target=/input,readonly" \
   --mount "type=bind,source=$(pwd)/reports,target=/output" \
-  rushstats:0.2.0 /input/customers.csv --all -o /output/report.md
+  rushstats:0.3.0 /input/customers.csv --all -o /output/report.md
 ```
 
 Only mount data you intend the command to read/write. `--max-bytes` and
@@ -76,7 +76,7 @@ separate process-memory limit, though reaching it may terminate the container.
 ## Verification
 
 ```sh
-python scripts/smoke_container.py --image rushstats:0.2.0
+python scripts/smoke_container.py --image rushstats:0.3.0
 ```
 
 This checks the non-root default separately, then checks offline/read-only-root
