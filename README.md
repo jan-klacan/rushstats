@@ -9,41 +9,82 @@ Rust parses the data and computes statistics; Python exposes a small API and CLI
 The Python package, import, and command are all named `rushstats`.
 
 ```sh
-rushstats examples/customers.csv --all -o report.md
+rushstats data.csv --all -o report.md
 ```
 
 No Python runtime dependencies, no external service, and no data leaves your machine.
-This is a beta-stage open-source CLI with a tested statistical core. Distribution
-workflows are included, but no PyPI or container publication was performed as part of
-this implementation. Install from this checkout or a built wheel until a release is
-published. [Sample report](examples/customers.md) ·
+This is a beta-stage open-source CLI with a tested statistical core, distributed
+through [GitHub Releases](https://github.com/jan-klacan/rushstats/releases).
+Download a prebuilt wheel from the
+[v0.2.0 release](https://github.com/jan-klacan/rushstats/releases/tag/v0.2.0).
+The package is not currently published on PyPI.
+[Sample report](examples/customers.md) ·
 [Grouped report](examples/customers_by_city.md) · [Changelog](CHANGELOG.md)
 
 ## Installation
 
-Python 3.10+ is required. Building from source also needs stable Rust/Cargo and a
-platform C linker (for example Xcode Command Line Tools on macOS). Installing a
-compatible prebuilt wheel needs only Python; end users do not need Rust.
+CPython 3.10+ is required. Installing a compatible prebuilt wheel needs no Rust
+compiler.
+
+### Install a release wheel
+
+Open the [v0.2.0 release assets](https://github.com/jan-klacan/rushstats/releases/tag/v0.2.0)
+and download the `.whl` file matching your operating system and Python architecture:
+
+| Platform | Look for these filename tags |
+| --- | --- |
+| Linux Intel/AMD 64-bit | `manylinux` and `x86_64` |
+| Linux ARM64 | `manylinux` and `aarch64` |
+| macOS Intel | `macosx` and `x86_64` |
+| macOS Apple Silicon | `macosx` and `arm64` |
+| Windows Intel/AMD 64-bit | `win_amd64` |
+
+The `cp310-abi3` tag means the wheel uses Python's stable ABI for CPython 3.10
+and later, not only Python 3.10. Linux wheels target glibc-based distributions
+(glibc 2.17+). Keep the downloaded wheel's filename unchanged and do not unzip it.
+
+Create and activate a virtual environment on macOS/Linux:
 
 ```sh
 python3 -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
-python -m pip install .
+source .venv/bin/activate
+```
+
+On Windows, use Command Prompt:
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+```
+
+Then install the downloaded wheel, replacing the example path below with its
+actual path and filename:
+
+```sh
+python -m pip install "/path/to/downloaded/rushstats-VERSION-PLATFORM.whl"
 rushstats --version
 rushstats --help
 ```
 
-To build and install a wheel explicitly:
+### Build from source
+
+Building from source also needs stable Rust/Cargo and a platform C linker
+(for example Xcode Command Line Tools on macOS). From a checkout of this repository,
+activate a virtual environment and run:
+
+```sh
+python -m pip install .
+```
+
+Alternatively, download `rushstats-0.2.0.tar.gz` from the release assets and install
+it with `python -m pip install /path/to/rushstats-0.2.0.tar.gz`.
+To build and install a wheel explicitly from a checkout:
 
 ```sh
 python -m pip install 'maturin>=1.14,<2'
 maturin build --release --locked
 python -m pip install target/wheels/rushstats-*.whl
 ```
-
-Wheels are platform specific, with Python's stable ABI starting at Python 3.10.
-The package has been tested locally on macOS ARM64 with CPython 3.14; the CI workflow
-also defines Linux, macOS and Windows checks. CI results require running that workflow.
 
 ## Choose an installation method
 
@@ -54,7 +95,7 @@ also defines Linux, macOS and Windows checks. CI results require running that wo
   `pipx install /path/to/rushstats-VERSION-PLATFORM.whl` or
   `uv tool install /path/to/rushstats-VERSION-PLATFORM.whl` using its actual filename.
   From this checkout, `pipx install .` or `uv tool install .` builds from source and
-  therefore requires Rust. After publication, installation by package name can be used.
+  therefore requires Rust.
 - **Container workflows:** use the optional [Docker image](docs/DOCKER.md), built
   locally. It runs as a non-root user and needs no network while analyzing data.
 
@@ -64,10 +105,15 @@ docker run --rm rushstats:0.2.0 --help
 ```
 
 The [release guide](docs/RELEASING.md) describes the Linux/macOS/Windows wheel matrix,
-source-archive checks and manual TestPyPI/PyPI Trusted Publishing setup. Docker is an
-optional execution environment; wheels remain the main distribution format.
+source-archive checks and optional TestPyPI/PyPI Trusted Publishing setup for future
+publication. GitHub Releases are the current distribution channel; Docker is an
+optional execution environment built from a checkout.
 
 ## Quick start
+
+Use your own CSV path, or run the examples below from a repository checkout.
+If you installed a wheel, download [customers.csv](examples/customers.csv) and
+replace `examples/customers.csv` with its local path.
 
 ```sh
 # Default: overview, descriptive statistics, missing data.
