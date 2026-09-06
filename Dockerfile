@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.98-slim-bookworm AS rust
-FROM python:3.13-slim-bookworm AS build
+FROM python:3.14-slim-bookworm AS build
 COPY --from=rust /usr/local/cargo /usr/local/cargo
 COPY --from=rust /usr/local/rustup /usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}" RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
@@ -13,7 +13,7 @@ COPY src/ src/
 COPY python/rushstats/*.py python/rushstats/*.pyi python/rushstats/py.typed python/rushstats/
 RUN maturin build --release --locked --strip --interpreter python --out /wheels
 
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 LABEL org.opencontainers.image.title="rushstats" \
       org.opencontainers.image.description="Rust-powered CSV statistics and Markdown reports" \
       org.opencontainers.image.source="https://github.com/jan-klacan/rushstats" \
