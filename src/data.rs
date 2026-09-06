@@ -22,11 +22,14 @@ pub struct Column {
     pub numbers: Option<Vec<Option<f64>>>,
     pub counts: BTreeMap<String, usize>,
     pub missing: usize,
+    pub labels: Option<Vec<Option<String>>>,
 }
 #[derive(Debug)]
 pub struct Dataset {
     pub columns: Vec<Column>,
     pub rows: usize,
+    pub groups: BTreeMap<Vec<Option<String>>, Vec<usize>>,
+    pub duplicate_flags: Option<Vec<bool>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +39,9 @@ pub struct LoadOptions {
     pub headers: bool,
     pub types: BTreeMap<String, ColumnType>,
     pub max_bytes: u64,
+    pub group_by: Vec<String>,
+    pub max_groups: usize,
+    pub duplicates: bool,
 }
 impl Default for LoadOptions {
     fn default() -> Self {
@@ -44,6 +50,9 @@ impl Default for LoadOptions {
             headers: true,
             types: BTreeMap::new(),
             max_bytes: 512 * 1024 * 1024,
+            group_by: Vec::new(),
+            max_groups: 100,
+            duplicates: false,
         }
     }
 }
@@ -170,6 +179,23 @@ pub fn load(reader: impl Read, options: &LoadOptions) -> Result<Dataset> {
             return Err(invalid("unknown is not a valid type override"));
         }
     }
+    if options.max_groups == 0 || options.max_groups > 10000 {
+        return Err(invalid("max_groups must be between 1 and 10000"));
+    }
+    let mut group_indices = Vec::new();
+    for name in &options.group_by {
+        let index = names
+            .iter()
+            .position(|n| n == name)
+            .ok_or_else(|| invalid(format!("unknown group-by column: {name:?}")))?;
+        if group_indices.contains(&index) {
+            return Err(invalid("group-by columns must not repeat"));
+        }
+        group_indices.push(index);
+    }
+    let mut groups: BTreeMap<Vec<Option<String>>, Vec<usize>> = BTreeMap::new();
+    let mut seen_rows = options.duplicates.then(HashSet::new);
+    let mut duplicate_flags = options.duplicates.then(Vec::new);
     // Infer over the whole column, retaining only category counts and parsed
     // numeric candidates; no raw table is copied into Python.
     let mut columns: Vec<Column> = names
@@ -180,6 +206,7 @@ pub fn load(reader: impl Read, options: &LoadOptions) -> Result<Dataset> {
             numbers: Some(Vec::new()),
             counts: BTreeMap::new(),
             missing: 0,
+            labels: (!group_indices.is_empty()).then(Vec::new),
         })
         .collect();
     let mut integers = vec![true; columns.len()];
@@ -187,8 +214,38 @@ pub fn load(reader: impl Read, options: &LoadOptions) -> Result<Dataset> {
     let mut rows = 0;
     for record in rdr.records() {
         let record = record?;
+        if let (Some(seen), Some(flags)) = (&mut seen_rows, &mut duplicate_flags) {
+            flags.push(!seen.insert(record.iter().map(String::from).collect::<Vec<_>>()));
+        }
+        if !group_indices.is_empty() {
+            let key = group_indices
+                .iter()
+                .map(|&i| {
+                    let raw = &record[i];
+                    if is_missing(raw) {
+                        None
+                    } else {
+                        Some(raw.to_owned())
+                    }
+                })
+                .collect();
+            groups.entry(key).or_default().push(rows);
+            if groups.len() > options.max_groups {
+                return Err(invalid(format!(
+                    "group count exceeds max_groups limit ({})",
+                    options.max_groups
+                )));
+            }
+        }
         rows += 1;
         for (i, (col, raw)) in columns.iter_mut().zip(record.iter()).enumerate() {
+            if let Some(labels) = &mut col.labels {
+                labels.push(if is_missing(raw) {
+                    None
+                } else {
+                    Some(raw.to_owned())
+                });
+            }
             if is_missing(raw) {
                 col.missing += 1;
                 if let Some(values) = &mut col.numbers {
@@ -258,6 +315,7 @@ pub fn load(reader: impl Read, options: &LoadOptions) -> Result<Dataset> {
         // before statistics allocate sorted copies and correlation workspaces.
         if col.numbers.is_some() {
             col.counts.clear();
+            col.labels = None;
         }
         // Canonicalize boolean categories; numeric uniqueness is computed from f64.
         if col.kind == ColumnType::Boolean {
@@ -269,7 +327,12 @@ pub fn load(reader: impl Read, options: &LoadOptions) -> Result<Dataset> {
             }
         }
     }
-    Ok(Dataset { columns, rows })
+    Ok(Dataset {
+        columns,
+        rows,
+        groups,
+        duplicate_flags,
+    })
 }
 
 #[cfg(test)]
@@ -353,6 +416,20 @@ mod tests {
             ..LoadOptions::default()
         };
         assert!(load(ByteReader(bytes), &options).is_ok());
+    }
+    #[test]
+    fn exact_duplicates_and_groups() {
+        let options = LoadOptions {
+            duplicates: true,
+            group_by: vec!["g".into()],
+            ..LoadOptions::default()
+        };
+        let d = load(b"g,x\nA,1\nA,1\nNA,2\nnull,2\n".as_slice(), &options).unwrap();
+        assert_eq!(d.duplicate_flags, Some(vec![false, true, false, false]));
+        assert_eq!(d.groups[&vec![None]], vec![2, 3]);
+        let subset = crate::grouping::subset(&d, &[0, 1]);
+        assert_eq!(subset.columns[0].counts["A"], 2);
+        assert_eq!(subset.columns[1].numbers, Some(vec![Some(1.), Some(1.)]));
     }
     #[test]
     fn missing_tokens() {

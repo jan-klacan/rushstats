@@ -42,8 +42,8 @@ def table(headers: Iterable[str], rows: Iterable[Iterable[Any]]) -> str:
     return "\n".join(lines)
 
 
-def render(data: dict[str, Any]) -> str:
-    parts = ["# Dataset Statistical Report"]
+def render(data: dict[str, Any], *, details: bool = True) -> str:
+    parts = ["# Dataset Statistical Report"] if details else []
     if data.get("description"):
         parts.append(escape(data["description"]))
     for key in ("target", "date_column"):
@@ -140,6 +140,18 @@ def render(data: dict[str, Any]) -> str:
             ],
         ),
     }
+    layouts["robust"] = (
+        "Robust Statistics",
+        [
+            ("name", "Column"),
+            ("count", "Count"),
+            ("mad", "MAD"),
+            ("trimmed_mean", "Trimmed mean"),
+            ("trim_fraction", "Trim fraction per tail"),
+            ("trimmed_each_tail", "Removed per tail"),
+            ("retained_count", "Retained"),
+        ],
+    )
     for name in (
         "describe",
         "missing",
@@ -148,6 +160,8 @@ def render(data: dict[str, Any]) -> str:
         "categorical",
         "outliers",
         "cardinality",
+        "robust",
+        "duplicates",
     ):
         if name not in sections:
             continue
@@ -177,6 +191,20 @@ def render(data: dict[str, Any]) -> str:
                         ),
                     ]
                 )
+        elif name == "duplicates":
+            parts.extend(
+                [
+                    "## Duplicate Rows",
+                    table(
+                        ["Property", "Value"],
+                        [
+                            ["Repeated rows after first occurrence", section["count"]],
+                            ["Duplicate percentage", section["percentage"]],
+                            ["Unique rows", section["unique_rows"]],
+                        ],
+                    ),
+                ]
+            )
         elif name == "correlation":
             parts.append("## Correlations")
             for method, matrix in section.items():
@@ -225,7 +253,15 @@ def render(data: dict[str, Any]) -> str:
                     [
                         f"### {escape(row['name'])}",
                         table(
-                            ["Count", "Missing", "Unique", "Mode", "Mode count"],
+                            [
+                                "Count",
+                                "Missing",
+                                "Unique",
+                                "Mode",
+                                "Mode count",
+                                "Dominant %",
+                                "Entropy (bits)",
+                            ],
                             [
                                 [
                                     row[k]
@@ -235,6 +271,8 @@ def render(data: dict[str, Any]) -> str:
                                         "unique",
                                         "mode",
                                         "mode_count",
+                                        "dominant_percentage",
+                                        "entropy_bits",
                                     )
                                 ]
                             ],
@@ -248,18 +286,43 @@ def render(data: dict[str, Any]) -> str:
                         ),
                     ]
                 )
-    parts.extend(
-        [
-            "## Methodology",
-            METHODOLOGY,
-            "## Notes",
-            "— means undefined, insufficient observations, or a result outside the finite float64 range. "
-            "All-missing columns have unknown type unless overridden. Dates remain text. "
-            "Numeric calculations use float64; integers beyond 2^53 may lose precision. "
-            "Outliers and identifier suggestions are heuristics, not proof of data errors. "
-            "Duplicate rows are retained; duplicate-row counting is not performed.",
-        ]
-    )
+    groups = data.get("groups", {})
+    if groups.get("items"):
+        parts.append("## Grouped Summaries")
+        for index, item in enumerate(groups["items"], 1):
+            parts.extend(
+                [
+                    f"### Group {index}",
+                    table(
+                        ["Grouping column", "Value", "Missing"],
+                        (
+                            [name, value, value is None]
+                            for name, value in zip(groups["by"], item["key"])
+                        ),
+                    ),
+                    f"Rows: {item['result']['rows']}",
+                ]
+            )
+            body = render(item["result"], details=False)
+            parts.append(
+                "\n".join(
+                    "##" + line if line.startswith("#") else line
+                    for line in body.splitlines()
+                )
+            )
+    if details:
+        parts.extend(
+            [
+                "## Methodology",
+                METHODOLOGY,
+                "## Notes",
+                "— means undefined, insufficient observations, or a result outside the finite float64 range. "
+                "All-missing columns have unknown type unless overridden. Dates remain text. "
+                "Numeric calculations use float64; integers beyond 2^53 may lose precision. "
+                "Outliers and identifier suggestions are heuristics, not proof of data errors. "
+                "Duplicate rows are retained in all analyses.",
+            ]
+        )
     return "\n\n".join(parts) + "\n"
 
 
@@ -270,4 +333,8 @@ METHODOLOGY = """- Missing tokens: empty/whitespace-only, NA, N/A, null, NaN (ca
 - Skewness is adjusted Fisher–Pearson: sqrt(n(n−1))/(n−2) × m3/m2^(3/2), for n≥3. Excess kurtosis is (n−1)/((n−2)(n−3)) × ((n+1)(m4/m2²−3)+6), for n≥4. Here mk is the mean kth centered power. Both are undefined for constant columns.
 - Outliers lie strictly outside Q1−1.5×IQR and Q3+1.5×IQR. A likely identifier has at least 20 rows, no missing values and all values unique; this never changes its type.
 - Numeric uniqueness compares float64 values (signed zeros are equal); boolean values are case-normalized; categorical strings preserve whitespace and case. Category ties sort lexicographically.
+- MAD is the median absolute deviation from the median, without normal-distribution scaling. The trimmed mean removes floor(n × trim_fraction) observations from each tail; missing values are excluded first.
+- Categorical entropy is −Σ p log2(p) in bits over all non-missing categories, regardless of the top-N display limit. A constant has zero entropy; an empty column is undefined. Dominant percentage uses the most frequent category.
+- Duplicate rows match all decoded CSV fields exactly, including whitespace and missing-token spelling. Quoting style and record line endings do not affect equality. Counts exclude the first occurrence; percentages use all rows. No rows are dropped.
+- Groups use exact decoded key strings, with all missing tokens combined into an explicit missing key. Numeric spellings and boolean case remain distinct group keys. Groups retain the full dataset's column types and are ordered lexicographically, with missing keys first. Each group's percentages and statistics use only its rows.
 - Reports use six significant digits and a fixed section order, with no timestamp."""

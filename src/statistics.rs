@@ -130,6 +130,36 @@ impl Numeric {
         json!({"count":self.sorted.len(),"unique":self.unique(),"zeros":self.sorted.iter().filter(|&&v|v==0.).count(),"skewness":self.skewness,"excess_kurtosis":self.kurtosis,
             "q1":quantile(&self.sorted,0.25),"median":quantile(&self.sorted,0.5),"q3":quantile(&self.sorted,0.75)})
     }
+    /// Raw median absolute deviation and symmetric trimmed mean.
+    pub fn robust(&self, trim: f64) -> Value {
+        let n = self.sorted.len();
+        let cut = (n as f64 * trim).floor() as usize;
+        let kept = &self.sorted[cut..n - cut];
+        let trimmed_mean = scaled_mean(kept);
+        let mad = quantile(&self.sorted, 0.5).and_then(|median| {
+            let scale = self
+                .sorted
+                .iter()
+                .map(|v| v.abs())
+                .fold(0., f64::max)
+                .max(f64::MIN_POSITIVE);
+            let mut deviations: Vec<f64> = self
+                .sorted
+                .iter()
+                .map(|x| {
+                    if (x - median).is_finite() {
+                        ((x - median) / scale).abs()
+                    } else {
+                        (x / scale - median / scale).abs()
+                    }
+                })
+                .collect();
+            deviations.sort_by(f64::total_cmp);
+            quantile(&deviations, 0.5).and_then(|m| finite(m * scale))
+        });
+        json!({"count":n,"mad":mad,"trimmed_mean":trimmed_mean,
+            "trim_fraction":trim,"trimmed_each_tail":cut,"retained_count":kept.len()})
+    }
     pub fn outliers(&self) -> Value {
         let bounds = quantile(&self.sorted, 0.25)
             .zip(quantile(&self.sorted, 0.75))
@@ -152,6 +182,35 @@ impl Numeric {
         json!({"lower":bounds.and_then(|(a,_)|finite(a)),"upper":bounds.and_then(|(_,b)|finite(b)),"count":count,
             "percentage":count.map(|c|100.*c as f64/self.sorted.len() as f64)})
     }
+}
+
+fn scaled_mean(sorted: &[f64]) -> Option<f64> {
+    let anchor = quantile(sorted, 0.5)?;
+    let scale = sorted
+        .iter()
+        .map(|v| v.abs())
+        .fold(0., f64::max)
+        .max(f64::MIN_POSITIVE);
+    let mean = sum(sorted.iter().map(|x| {
+        if (x - anchor).is_finite() {
+            (x - anchor) / scale
+        } else {
+            x / scale - anchor / scale
+        }
+    })) / sorted.len() as f64;
+    finite(anchor + mean * scale)
+}
+
+/// Shannon entropy in bits, excluding missing observations.
+pub fn entropy(counts: impl Iterator<Item = usize> + Clone) -> Option<f64> {
+    let total = counts.clone().sum::<usize>() as f64;
+    if total == 0. {
+        return None;
+    }
+    Some(sum(counts.filter(|&n| n > 0).map(|n| {
+        let p = n as f64 / total;
+        -p * p.log2()
+    })))
 }
 
 fn centered(values: &[f64]) -> Vec<f64> {
@@ -284,6 +343,20 @@ mod tests {
         );
         assert_eq!(c["count"], 3);
         near(c["value"].as_f64(), 1.);
+    }
+    #[test]
+    fn robust_and_entropy() {
+        let n = Numeric::new(&[Some(1.), Some(2.), None, Some(3.), Some(4.), Some(100.)]);
+        let r = n.robust(0.2);
+        near(r["mad"].as_f64(), 1.);
+        near(r["trimmed_mean"].as_f64(), 3.);
+        assert_eq!(r["trimmed_each_tail"], 1);
+        near(entropy([2, 2].into_iter()), 1.);
+        near(entropy([4].into_iter()), 0.);
+        assert!(entropy([0].into_iter()).is_none());
+        let extreme = Numeric::new(&[Some(-1e308), Some(1e308)]).robust(0.);
+        assert_eq!(extreme["mad"], 1e308);
+        assert_eq!(extreme["trimmed_mean"], 0.);
     }
     #[test]
     fn outliers_and_unique() {

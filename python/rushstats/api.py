@@ -22,6 +22,8 @@ ANALYSES = (
     "categorical",
     "outliers",
     "cardinality",
+    "robust",
+    "duplicates",
 )
 
 
@@ -79,6 +81,9 @@ def analyze(
     correlation: Iterable[str] = ("pearson",),
     percentiles: Iterable[float] = (0, 25, 50, 75, 100),
     top: int = 10,
+    trim: float = 0.1,
+    group_by: Iterable[str] = (),
+    max_groups: int = 100,
     description: str | None = None,
     target: str | None = None,
     date_column: str | None = None,
@@ -88,14 +93,22 @@ def analyze(
 
     `analyses=["all"]` selects every analysis. `types` maps exact column names
     to integer, float, boolean or categorical. Target and date_column are labels
-    only and never change parsing or select statistical models.
+    only and never change parsing or select statistical models. `group_by` adds
+    per-group analyses using full-dataset types; missing keys form explicit groups.
+    `trim` is the fraction removed from each tail for the robust trimmed mean.
     """
     source = Path(path).resolve()
     selected = (
         list(analyses) if analyses is not None else ["overview", "describe", "missing"]
     )
-    if isinstance(analyses, str) or isinstance(correlation, str):
-        raise ValueError("analyses and correlation must be sequences, not strings")
+    if (
+        isinstance(analyses, str)
+        or isinstance(correlation, str)
+        or isinstance(group_by, str)
+    ):
+        raise ValueError(
+            "analyses, correlation and group_by must be sequences, not strings"
+        )
     if selected == ["all"]:
         selected = list(ANALYSES)
     if len(delimiter) != 1 or not delimiter.isascii():
@@ -106,11 +119,14 @@ def analyze(
             "headers": headers,
             "types": dict(types or {}),
             "max_bytes": max_bytes,
+            "group_by": list(group_by),
+            "max_groups": max_groups,
         },
         "analyses": selected,
         "correlation": list(correlation),
         "percentiles": list(percentiles),
         "top": top,
+        "trim": trim,
     }
     data = json.loads(_core.analyze_json(source, json.dumps(options, allow_nan=False)))
     names = {column["name"] for column in data["columns"]}

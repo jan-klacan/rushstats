@@ -89,9 +89,9 @@ Complete-pair counts:
 
 ### city
 
-| Count | Missing | Unique | Mode | Mode count |
-| --- | --- | --- | --- | --- |
-| 5 | 0 | 3 | London | 3 |
+| Count | Missing | Unique | Mode | Mode count | Dominant % | Entropy &#40;bits&#41; |
+| --- | --- | --- | --- | --- | --- | --- |
+| 5 | 0 | 3 | London | 3 | 60 | 1.37095 |
 
 | Category | Count | Percentage |
 | --- | --- | --- |
@@ -101,9 +101,9 @@ Complete-pair counts:
 
 ### active
 
-| Count | Missing | Unique | Mode | Mode count |
-| --- | --- | --- | --- | --- |
-| 5 | 0 | 2 | true | 4 |
+| Count | Missing | Unique | Mode | Mode count | Dominant % | Entropy &#40;bits&#41; |
+| --- | --- | --- | --- | --- | --- | --- |
+| 5 | 0 | 2 | true | 4 | 80 | 0.721928 |
 
 | Category | Count | Percentage |
 | --- | --- | --- |
@@ -126,6 +126,21 @@ Complete-pair counts:
 | city | 5 | 0 | 3 | 60 | No | No |
 | active | 5 | 0 | 2 | 40 | No | No |
 
+## Robust Statistics
+
+| Column | Count | MAD | Trimmed mean | Trim fraction per tail | Removed per tail | Retained |
+| --- | --- | --- | --- | --- | --- | --- |
+| age | 4 | 3 | 30.75 | 0.1 | 0 | 4 |
+| income | 4 | 6000 | 58250 | 0.1 | 0 | 4 |
+
+## Duplicate Rows
+
+| Property | Value |
+| --- | --- |
+| Repeated rows after first occurrence | 1 |
+| Duplicate percentage | 20 |
+| Unique rows | 4 |
+
 ## Methodology
 
 - Missing tokens: empty/whitespace-only, NA, N/A, null, NaN (case-insensitive after trimming). No imputation.
@@ -135,8 +150,12 @@ Complete-pair counts:
 - Skewness is adjusted Fisher–Pearson: sqrt(n(n−1))/(n−2) × m3/m2^(3/2), for n≥3. Excess kurtosis is (n−1)/((n−2)(n−3)) × ((n+1)(m4/m2²−3)+6), for n≥4. Here mk is the mean kth centered power. Both are undefined for constant columns.
 - Outliers lie strictly outside Q1−1.5×IQR and Q3+1.5×IQR. A likely identifier has at least 20 rows, no missing values and all values unique; this never changes its type.
 - Numeric uniqueness compares float64 values (signed zeros are equal); boolean values are case-normalized; categorical strings preserve whitespace and case. Category ties sort lexicographically.
+- MAD is the median absolute deviation from the median, without normal-distribution scaling. The trimmed mean removes floor(n × trim_fraction) observations from each tail; missing values are excluded first.
+- Categorical entropy is −Σ p log2(p) in bits over all non-missing categories, regardless of the top-N display limit. A constant has zero entropy; an empty column is undefined. Dominant percentage uses the most frequent category.
+- Duplicate rows match all decoded CSV fields exactly, including whitespace and missing-token spelling. Quoting style and record line endings do not affect equality. Counts exclude the first occurrence; percentages use all rows. No rows are dropped.
+- Groups use exact decoded key strings, with all missing tokens combined into an explicit missing key. Numeric spellings and boolean case remain distinct group keys. Groups retain the full dataset's column types and are ordered lexicographically, with missing keys first. Each group's percentages and statistics use only its rows.
 - Reports use six significant digits and a fixed section order, with no timestamp.
 
 ## Notes
 
-— means undefined, insufficient observations, or a result outside the finite float64 range. All-missing columns have unknown type unless overridden. Dates remain text. Numeric calculations use float64; integers beyond 2^53 may lose precision. Outliers and identifier suggestions are heuristics, not proof of data errors. Duplicate rows are retained; duplicate-row counting is not performed.
+— means undefined, insufficient observations, or a result outside the finite float64 range. All-missing columns have unknown type unless overridden. Dates remain text. Numeric calculations use float64; integers beyond 2^53 may lose precision. Outliers and identifier suggestions are heuristics, not proof of data errors. Duplicate rows are retained in all analyses.

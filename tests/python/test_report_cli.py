@@ -5,7 +5,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from rushstats import analyze
+from rushstats import __version__, analyze
 from rushstats.report import escape
 
 
@@ -68,7 +68,7 @@ def test_cli_errors(tmp_path, csv_file):
     assert "Traceback" not in run.stderr
     assert cli("--nonsense").returncode == 2
     assert cli("--help").returncode == 0
-    assert "0.1.0" in cli("--version").stdout
+    assert __version__ in cli("--version").stdout
     p = csv_file("x\n1\n")
     assert cli(p, "--type", "bad").returncode == 1
     assert cli(p, "--type", "x=float", "--type", "x=integer").returncode == 1
@@ -148,3 +148,34 @@ def test_installed_package_identity():
         e.name == "rushstats" and e.value == "rushstats.cli:main"
         for e in dist.entry_points
     )
+
+
+def test_cli_new_analyses_and_grouping(csv_file, tmp_path):
+    source = csv_file("g,x\nA,1\nA,1\nA,3\nB,100\n")
+    output = tmp_path / "grouped.md"
+    result = cli(
+        source,
+        "--robust",
+        "--duplicates",
+        "--categorical",
+        "--trim",
+        "0.2",
+        "--group-by",
+        "g",
+        "--max-groups",
+        "2",
+        "-o",
+        output,
+    )
+    assert result.returncode == 0, result.stderr
+    text = output.read_text(encoding="utf-8")
+    for title in ("Robust Statistics", "Duplicate Rows", "Grouped Summaries"):
+        assert f"## {title}" in text
+    assert "Entropy" in text
+    assert "## Descriptive Statistics" not in text
+    failed = cli(
+        source, "--group-by", "g", "--max-groups", "1", "-o", tmp_path / "too_many.md"
+    )
+    assert failed.returncode == 1
+    assert "max_groups" in failed.stderr
+    assert not (tmp_path / "too_many.md").exists()

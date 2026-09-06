@@ -49,6 +49,25 @@ def parser() -> argparse.ArgumentParser:
         default="0,25,50,75,100",
         help="comma-separated percentiles from 0 to 100",
     )
+    p.add_argument(
+        "--trim",
+        type=float,
+        default=0.1,
+        help="fraction trimmed from each tail for --robust, 0 <= fraction < 0.5 (default: 0.1)",
+    )
+    p.add_argument(
+        "--group-by",
+        action="append",
+        default=[],
+        metavar="COLUMN",
+        help="add grouped reports; repeat for multi-column groups (exact column names)",
+    )
+    p.add_argument(
+        "--max-groups",
+        type=int,
+        default=100,
+        help="maximum number of groups, 1–10000 (default: 100); errors if exceeded",
+    )
     p.add_argument("--description", help="dataset description")
     p.add_argument("--target", help="target column label (metadata only)")
     p.add_argument(
@@ -100,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             delimiter=args.delimiter,
             headers=not args.no_header,
             top=args.top,
+            trim=args.trim,
+            group_by=args.group_by,
+            max_groups=args.max_groups,
             percentiles=[float(p) for p in args.percentiles.split(",")],
             correlation=methods,
             description=args.description,

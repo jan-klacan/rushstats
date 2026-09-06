@@ -2,6 +2,7 @@
 pub mod analysis;
 pub mod data;
 pub mod error;
+pub mod grouping;
 pub mod statistics;
 
 use pyo3::{
@@ -19,9 +20,8 @@ fn analyze_json(py: Python<'_>, path: PathBuf, options_json: &str) -> PyResult<S
     let filename = path.to_string_lossy().into_owned();
     py.detach(move || {
         let file = std::fs::File::open(&path).map_err(error::StatsError::from)?;
-        let dataset = data::load(file, &options.load)?;
-        serde_json::to_string(&analysis::run(&dataset, &options))
-            .map_err(|e| error::invalid(e.to_string()))
+        let result = analysis::analyze(file, options)?;
+        serde_json::to_string(&result).map_err(|e| error::invalid(e.to_string()))
     })
     .map_err(|e| match e {
         error::StatsError::Io(e) => {

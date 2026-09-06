@@ -78,10 +78,15 @@ analysis flags replace the default selection; `--all` selects everything.
 | `--missing` | Total/non-missing/missing counts and missing percentage |
 | `--correlation` | Numeric correlation matrix, complete-pair counts and reasons for undefined entries |
 | `--distribution` | Adjusted skewness, excess kurtosis, unique/zero counts and quartiles |
-| `--categorical` | Boolean/text/unknown-column counts, cardinality, mode, mode count and top categories |
+| `--categorical` | Boolean/text/unknown-column counts, cardinality, mode, mode count, dominant percentage, entropy in bits and top categories |
 | `--outliers` | IQR fences, outlier count and percentage |
 | `--cardinality` | Unique count/percentage, constant flag, likely-identifier heuristic |
-| `--all` | All of the above |
+| `--robust` | Raw MAD, trimmed mean, removed-per-tail and retained counts |
+| `--duplicates` | Repeated-row count, percentage and unique-row count |
+| `--all` | All of the above; grouping is added only when `--group-by` is supplied |
+| `--trim FRACTION` | Fraction removed from each tail for `--robust`; default 0.1, allowed 0 ≤ fraction < 0.5 |
+| `--group-by COLUMN` | Add the selected analyses per group; repeat for multi-column grouping |
+| `--max-groups N` | Maximum groups, default 100, allowed 1–10000; exceeding the limit is an error |
 | `--correlation-method pearson\|spearman\|both` | Methods used with `--correlation` or `--all`; default Pearson |
 | `--top N` | Top categories, default 10, allowed 1–1000 |
 | `--percentiles 0,25,50,75,100` | Additional descriptive output; 0–100 inclusive, at most 100 values |
@@ -122,15 +127,67 @@ print(result.data['sections']['describe'][0]['mean'])
 complete = analyze('examples/customers.csv', analyses=['all'])
 ```
 
-`analyze` also accepts `delimiter`, `headers`, `top`, `target`, `date_column`, and
-`max_bytes`. Paths accept `str` or `os.PathLike`. `ValueError` means invalid data or
+`analyze` also accepts `delimiter`, `headers`, `top`, `target`, `date_column`,
+`max_bytes`, `trim`, `group_by`, and `max_groups`. Paths accept `str` or `os.PathLike`. `ValueError` means invalid data or
 options; filesystem failures raise `OSError` subclasses (including `FileNotFoundError`).
 The result is a Python dictionary inside `AnalysisResult`, with `schema_version: 1`,
-`rows`, `column_count`, `total_missing`, `columns`, `analyses`, and `sections`.
+`rows`, `column_count`, `total_missing`, `columns`, `analyses`, `sections`, and
+`groups`. The `groups` object contains `by` (key column names) and `items`, each
+with `key` (a list of strings or `None`) and `result` (a complete group summary).
 The API also records source/metadata for output protection. Saved summaries can still
 be exported after the source file is removed. No input table is copied
 into Python. Undefined numeric results are `None`. `data` is mutable for inspection
 and downstream integration; callers should not mutate it before rendering.
+
+## Robust statistics, entropy, duplicates and groups
+
+```sh
+rushstats examples/customers.csv --robust --trim 0.2 --duplicates -o robust.md
+rushstats examples/customers.csv --all --group-by city -o by_city.md
+# Composite key: one report for each observed (region, product) combination.
+rushstats sales.csv --describe --robust --group-by region --group-by product \
+  --max-groups 200 -o sales_groups.md
+```
+
+```python
+result = analyze('examples/customers.csv', analyses=['all'],
+                 group_by=['city'], trim=0.2, max_groups=100)
+for group in result.data['groups']['items']:
+    print(group['key'], group['result']['rows'])
+```
+
+**MAD** is `median(abs(x - median(x)))`, without normal-distribution scaling.
+It uses non-missing numeric observations and type-7 medians. **Trimmed mean**
+removes `floor(n × trim)` values from each end of sorted non-missing values, then
+averages the retained values. The default trims 10% per tail; small groups may
+remove no values due to flooring. Empty numeric columns produce undefined values;
+constants have MAD zero. The report shows how many values were removed and retained.
+
+**Categorical entropy** is Shannon entropy `−Σ p log2(p)` in bits, calculated over
+all non-missing categories, including those hidden by `--top`. Uniform binary
+categories have entropy 1 bit, constants have 0, and empty columns are undefined.
+Dominant percentage is the mode frequency divided by non-missing count, times 100.
+
+**Duplicates** compare every decoded CSV field exactly. Quoted `"1"` and unquoted
+`1` match, but `1` and `1.0`, `NA` and `null`, or strings with different whitespace
+do not. CSV quoting style and record terminators are not part of the key; embedded
+newlines inside fields are. Counts exclude the first occurrence of each row;
+percentages use total rows. Rows are counted, never removed or exposed individually.
+
+**Groups** add per-group reports after the overall report. Repeat `--group-by` for
+composite keys; a column containing a comma is passed as one quoted argument.
+Group keys use exact decoded strings, even for numeric or boolean columns, so
+`01` and `1` form different groups. All missing tokens become one explicit missing
+key, and no rows are dropped. Only observed key combinations appear. Groups sort
+lexicographically, with missing keys first. The renderer labels missing keys
+explicitly and escapes group text like other CSV content.
+
+Each group uses the selected analyses, its own row counts and denominators, and
+the types inferred or overridden for the **full dataset**. For example, a globally
+numeric column remains numeric in an all-missing group, yielding undefined numeric
+statistics. Duplicate counts also apply within groups. The default maximum is
+100 groups; an unknown/repeated key column or too many groups produces an error
+before any report is written. `--all` never guesses which columns to group by.
 
 ## CSV rules, types and missing values
 
@@ -218,6 +275,7 @@ src/
   data.rs                  strict CSV adapter, loader, typed column model
   statistics.rs            reusable numeric algorithms, ranks, correlations
   analysis.rs              validated options, canonical registry/dispatch, summaries
+  grouping.rs              subsets of parsed columns; preserves global types
 python/rushstats/
   api.py                   public analyze / AnalysisResult, atomic output
   cli.py / __main__.py      argparse, exit codes
@@ -245,9 +303,18 @@ Numeric summaries sort once per column, O(n log n). Pearson is O(k²n), Spearman
 O(k²n log n), with O(k²) matrix output; many numeric columns can be expensive.
 Category maps use ordered trees, O(n log u) per column, and ranking costs O(u log u).
 Selecting fewer analyses skips unrelated statistics, but loading still performs
-whole-column inference and gathers frequency maps. Exact duplicate-row counting,
-date inference, histograms, custom missing tokens, configuration files and streaming
-approximate quantiles are intentionally outside this release.
+whole-column inference and gathers frequency maps. Raw MAD adds one sort per numeric
+column. Exact duplicate counting is opt-in (`--duplicates` or `--all`) and retains
+one decoded row key per unique row while loading, plus one flag per row. Equality
+checks resolve hash collisions; duplicate detection is not approximate.
+
+Grouping is opt-in and retains row indices and categorical labels. Groups are
+processed one at a time without rereading the CSV or reparsing numeric values;
+all group summaries remain in the final result. Runtime includes the selected
+analyses within each group, and many groups can produce a large report. `--max-groups`
+bounds the number of groups, not their size or total process memory. Date inference,
+histograms, custom missing tokens, configuration files and streaming approximate
+quantiles remain outside this release.
 
 ### Dependencies
 
@@ -309,5 +376,5 @@ python examples/benchmark.py --rows 100000
 ```
 
 The script prints timing and result dimensions; timings are hardware dependent and
-are not a performance guarantee. See `examples/customers.md` for the full sample
-report. The MIT license is preserved in `LICENSE`.
+are not a performance guarantee. See `examples/customers.md` for the full sample report and
+`examples/customers_by_city.md` for grouped output. The MIT license is preserved in `LICENSE`.

@@ -14,6 +14,8 @@ pub const ANALYSES: &[&str] = &[
     "categorical",
     "outliers",
     "cardinality",
+    "robust",
+    "duplicates",
 ];
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -23,6 +25,7 @@ pub struct Options {
     pub correlation: Vec<String>,
     pub percentiles: Vec<f64>,
     pub top: usize,
+    pub trim: f64,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -32,11 +35,17 @@ impl Default for Options {
             correlation: vec!["pearson".into()],
             percentiles: vec![0., 25., 50., 75., 100.],
             top: 10,
+            trim: 0.1,
         }
     }
 }
 impl Options {
     pub fn validate(&self) -> Result<()> {
+        if !self.trim.is_finite() || !(0. ..0.5).contains(&self.trim) {
+            return Err(invalid(
+                "trim must be a finite fraction from 0 (inclusive) to 0.5 (exclusive)",
+            ));
+        }
         if self.analyses.is_empty()
             || self
                 .analyses
@@ -69,11 +78,22 @@ impl Options {
         Ok(())
     }
 }
+/// Validate and execute an analysis from any Rust reader in a single pass.
+/// This is the public Rust entry point; it configures optional loading state.
+pub fn analyze(reader: impl std::io::Read, mut options: Options) -> Result<Value> {
+    options.validate()?;
+    options.load.duplicates = options.analyses.iter().any(|s| s == "duplicates");
+    let data = crate::data::load(reader, &options.load)?;
+    Ok(run(&data, &options))
+}
+
 fn categorical(column: &crate::data::Column, rows: usize, top: usize) -> Value {
     let mut counts: Vec<_> = column.counts.iter().collect();
     counts.sort_by(|(a, x), (b, y)| y.cmp(x).then(a.cmp(b)));
     let count = rows - column.missing;
     json!({"count": count, "missing":column.missing,"unique":counts.len(),
+        "entropy_bits":crate::statistics::entropy(column.counts.values().copied()),
+        "dominant_percentage":counts.first().map(|(_,n)|100. * **n as f64 / count as f64),
         "mode":counts.first().map(|(s,_)|s.as_str()),"mode_count":counts.first().map(|(_,n)|**n),
         "top":counts.iter().take(top).map(|(s,n)|json!({"value":s,"count":n,"percentage":100. * **n as f64 / count as f64})).collect::<Vec<_>>()})
 }
@@ -82,9 +102,15 @@ fn categorical(column: &crate::data::Column, rows: usize, top: usize) -> Value {
 pub fn run(data: &Dataset, options: &Options) -> Value {
     use crate::statistics::{Numeric, correlation};
     let selected = |name: &str| options.analyses.iter().any(|s| s == name);
-    let need_numeric = ["describe", "distribution", "outliers", "cardinality"]
-        .iter()
-        .any(|s| selected(s));
+    let need_numeric = [
+        "describe",
+        "distribution",
+        "outliers",
+        "cardinality",
+        "robust",
+    ]
+    .iter()
+    .any(|s| selected(s));
     let numeric: Vec<Option<Numeric>> = data
         .columns
         .iter()
@@ -100,6 +126,19 @@ pub fn run(data: &Dataset, options: &Options) -> Value {
     let mut sections = serde_json::Map::new();
     for &analysis in ANALYSES {
         if !selected(analysis) || analysis == "overview" {
+            continue;
+        }
+        if analysis == "duplicates" {
+            let count = data
+                .duplicate_flags
+                .as_ref()
+                .map(|flags| flags.iter().filter(|&&v| v).count());
+            sections.insert(
+                analysis.into(),
+                json!({"count":count,
+                "unique_rows":count.map(|n|data.rows-n),
+                "percentage":count.map(|n|100.*n as f64/data.rows as f64)}),
+            );
             continue;
         }
         if analysis == "missing" {
@@ -139,6 +178,7 @@ pub fn run(data: &Dataset, options: &Options) -> Value {
                 "describe" => n.map(|n| n.describe(col.missing, &options.percentiles)),
                 "distribution" => n.map(Numeric::distribution),
                 "outliers" => n.map(Numeric::outliers),
+                "robust" => n.map(|n| n.robust(options.trim)),
                 "categorical" if col.numbers.is_none() => {
                     Some(categorical(col, data.rows, options.top))
                 }
@@ -158,7 +198,15 @@ pub fn run(data: &Dataset, options: &Options) -> Value {
         }
         sections.insert(analysis.into(), json!(results));
     }
-    json!({"schema_version":1,"rows":data.rows,"column_count":data.columns.len(),"total_missing":data.columns.iter().map(|c|c.missing).sum::<usize>(),"columns":columns,"analyses":ANALYSES.iter().filter(|s|selected(s)).collect::<Vec<_>>(),"sections":sections})
+    let groups: Vec<Value> = data
+        .groups
+        .iter()
+        .map(|(key, indices)| {
+            let subset = crate::grouping::subset(data, indices);
+            json!({"key":key,"result":run(&subset,options)})
+        })
+        .collect();
+    json!({"schema_version":1,"rows":data.rows,"column_count":data.columns.len(),"total_missing":data.columns.iter().map(|c|c.missing).sum::<usize>(),"columns":columns,"analyses":ANALYSES.iter().filter(|s|selected(s)).collect::<Vec<_>>(),"sections":sections,"groups":{"by":options.load.group_by,"items":groups}})
 }
 
 #[cfg(test)]
