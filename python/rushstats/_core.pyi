@@ -1,0 +1,3 @@
+from os import PathLike
+
+def analyze_json(path: str | PathLike[str], options_json: str) -> str: ...

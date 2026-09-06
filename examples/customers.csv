@@ -1,0 +1,6 @@
+age,income,city,active
+25,50000,London,true
+31,62000,Paris,false
+,71000,Berlin,true
+42,,London,true
+25,50000,London,true
