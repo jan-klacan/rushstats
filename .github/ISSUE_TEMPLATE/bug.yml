@@ -1,0 +1,24 @@
+name: Bug report
+description: Report incorrect statistics, parsing, CLI or packaging behavior.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version and environment
+      description: rushstats --version, Python version, operating system, and installation method.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include the command or API call and a small synthetic CSV. Do not include private datasets or credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: For numerical discrepancies, include the expected definition or reference calculation.
+    validations:
+      required: true

@@ -1,0 +1,25 @@
+# Allow only package build inputs. Datasets, credentials and Git history stay out.
+**
+!Dockerfile
+!Cargo.toml
+!Cargo.lock
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+src/**
+!src/*.rs
+!python/
+python/**
+!python/rushstats/
+python/rushstats/**
+!python/rushstats/*.py
+!python/rushstats/*.pyi
+!python/rushstats/py.typed
+**/__pycache__
+**/*.pyc
+**/*.so
+**/*.pyd
+**/.env*
+**/*.pem
+**/*.key

@@ -1,0 +1,57 @@
+name: Publish Python package
+on:
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: Package index (configure its Trusted Publisher first)
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+permissions:
+  contents: read
+concurrency:
+  group: publish-${{ github.ref }}-${{ inputs.destination }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python scripts/check_release.py --require-tag
+  build:
+    needs: validate
+    uses: ./.github/workflows/wheels.yml
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: ${{ inputs.destination }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: Publish to TestPyPI
+        if: inputs.destination == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+      - name: Publish to PyPI
+        if: inputs.destination == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1

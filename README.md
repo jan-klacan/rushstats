@@ -1,5 +1,9 @@
 # rushstats
 
+[![Tests](https://github.com/jan-klacan/rushstats/actions/workflows/ci.yml/badge.svg)](https://github.com/jan-klacan/rushstats/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+
 Generate deterministic Markdown statistical reports from CSV with one command.
 Rust parses the data and computes statistics; Python exposes a small API and CLI.
 The Python package, import, and command are all named `rushstats`.
@@ -9,7 +13,11 @@ rushstats examples/customers.csv --all -o report.md
 ```
 
 No Python runtime dependencies, no external service, and no data leaves your machine.
-The project is not yet published to PyPI. Install from this checkout or a built wheel.
+This is a beta-stage open-source CLI with a tested statistical core. Distribution
+workflows are included, but no PyPI or container publication was performed as part of
+this implementation. Install from this checkout or a built wheel until a release is
+published. [Sample report](examples/customers.md) ·
+[Grouped report](examples/customers_by_city.md) · [Changelog](CHANGELOG.md)
 
 ## Installation
 
@@ -36,6 +44,28 @@ python -m pip install target/wheels/rushstats-*.whl
 Wheels are platform specific, with Python's stable ABI starting at Python 3.10.
 The package has been tested locally on macOS ARM64 with CPython 3.14; the CI workflow
 also defines Linux, macOS and Windows checks. CI results require running that workflow.
+
+## Choose an installation method
+
+- **Python API:** install a wheel in a virtual environment with `pip`. Compatible
+  wheels need no Rust compiler.
+- **CLI only:** install a wheel with `pipx` or `uv tool` to keep it isolated from
+  other Python projects. For a downloaded wheel, run
+  `pipx install /path/to/rushstats-VERSION-PLATFORM.whl` or
+  `uv tool install /path/to/rushstats-VERSION-PLATFORM.whl` using its actual filename.
+  From this checkout, `pipx install .` or `uv tool install .` builds from source and
+  therefore requires Rust. After publication, installation by package name can be used.
+- **Container workflows:** use the optional [Docker image](docs/DOCKER.md), built
+  locally. It runs as a non-root user and needs no network while analyzing data.
+
+```sh
+docker build -t rushstats:0.2.0 .
+docker run --rm rushstats:0.2.0 --help
+```
+
+The [release guide](docs/RELEASING.md) describes the Linux/macOS/Windows wheel matrix,
+source-archive checks and manual TestPyPI/PyPI Trusted Publishing setup. Docker is an
+optional execution environment; wheels remain the main distribution format.
 
 ## Quick start
 
@@ -344,8 +374,8 @@ cargo test --locked
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 python -m pytest -q
-ruff check python tests examples
-ruff format --check python tests examples
+ruff check python tests examples scripts
+ruff format --check python tests examples scripts
 
 # After editing Rust:
 maturin develop
@@ -378,3 +408,16 @@ python examples/benchmark.py --rows 100000
 The script prints timing and result dimensions; timings are hardware dependent and
 are not a performance guarantee. See `examples/customers.md` for the full sample report and
 `examples/customers_by_city.md` for grouped output. The MIT license is preserved in `LICENSE`.
+
+
+## Community and project status
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull-request guidance,
+[SECURITY.md](SECURITY.md) for vulnerability reporting, and [CHANGELOG.md](CHANGELOG.md)
+for changes. Report bugs using a minimal synthetic dataset through the repository's
+issue templates. Reports may contain category values and group labels from your data;
+review them before sharing publicly.
+
+The initial focus is correct, deterministic CSV profiling. Out-of-core processing,
+additional inferential statistics and a hosted interface are not current guarantees.
+The 0.x API may evolve; incompatible changes should be documented in the changelog.
