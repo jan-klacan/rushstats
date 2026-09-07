@@ -16,11 +16,11 @@ No Python runtime dependencies, no external service, and no data leaves your mac
 This is a beta-stage open-source CLI with a tested statistical core, distributed
 through [GitHub Releases](https://github.com/jan-klacan/rushstats/releases).
 Download a prebuilt wheel from the
-[v0.2.0 release](https://github.com/jan-klacan/rushstats/releases/tag/v0.2.0).
+[v0.3.0 pre-release](https://github.com/jan-klacan/rushstats/releases/tag/v0.3.0).
 The package is not currently published on PyPI.
-This checkout contains **v0.3.0** development: batch processing, saved configurations
-and terminal colours. Build from source to use these additions until v0.3.0 release
-wheels are published; v0.2.0 wheels do not include them.
+Version **0.3.0** includes sequential batch processing, saved JSON configurations
+and terminal colours. GitHub marks this version as a pre-release; its assets include
+five platform wheels and a source distribution.
 [Sample report](examples/customers.md) ·
 [Grouped report](examples/customers_by_city.md) · [Changelog](CHANGELOG.md)
 
@@ -31,7 +31,7 @@ compiler.
 
 ### Install a release wheel
 
-Open the [v0.2.0 release assets](https://github.com/jan-klacan/rushstats/releases/tag/v0.2.0)
+Open the [v0.3.0 release assets](https://github.com/jan-klacan/rushstats/releases/tag/v0.3.0)
 and download the `.whl` file matching your operating system and Python architecture:
 
 | Platform | Look for these filename tags |
@@ -79,8 +79,8 @@ activate a virtual environment and run:
 python -m pip install .
 ```
 
-Alternatively, download `rushstats-0.2.0.tar.gz` from the release assets and install
-it with `python -m pip install /path/to/rushstats-0.2.0.tar.gz`.
+Alternatively, download `rushstats-0.3.0.tar.gz` from the release assets and install
+it with `python -m pip install /path/to/rushstats-0.3.0.tar.gz`.
 To build and install a wheel explicitly from a checkout:
 
 ```sh
@@ -448,8 +448,8 @@ processed one at a time without rereading the CSV or reparsing numeric values;
 all group summaries remain in the final result. Runtime includes the selected
 analyses within each group, and many groups can produce a large report. `--max-groups`
 bounds the number of groups, not their size or total process memory. Date inference,
-histograms, custom missing tokens, configuration files and streaming approximate
-quantiles remain outside this release.
+histograms, custom missing tokens and streaming approximate quantiles remain outside
+this release. CLI analysis configurations can be saved and loaded as JSON presets.
 
 ### Dependencies
 
