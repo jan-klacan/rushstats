@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM rust:1.98-slim-bookworm AS rust
+FROM rust:1.99-slim-bookworm AS rust
 FROM python:3.13-slim-bookworm AS build
 COPY --from=rust /usr/local/cargo /usr/local/cargo
 COPY --from=rust /usr/local/rustup /usr/local/rustup
